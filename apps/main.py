@@ -1,5 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from apps.mongodb import users_collection
+
 
 
 app = FastAPI()
@@ -20,3 +22,7 @@ def home():
     }
 
 
+@app.get("/")
+def read_root():
+    user = users_collection.find_one({}, {"_id": 0})
+    return {"user": user}
