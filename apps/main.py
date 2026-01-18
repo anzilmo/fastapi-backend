@@ -1,7 +1,11 @@
-from fastapi import FastAPI, status
+from fastapi import FastAPI, Depends, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.security import OAuth2PasswordRequestForm
 from apps.mongodb import users_collection
-from pydantic import BaseModel
+
+from apps.auth.authentication import get_current_user, create_access_token
+from apps.users import users_db
+
 
 app = FastAPI()
 
@@ -13,7 +17,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-@app.get("/home")
+@app.get("/")
 def home():
     user = users_collection.find_one({}, {"_id": 0})
     return {
@@ -21,20 +25,16 @@ def home():
         "message": f"MongoDB connected for {user['name']}" if user else "MongoDB is empty"
     }
 
-class UserIn(BaseModel):
-    name: str
 
-class UserOut(BaseModel):
-    id: str
-    name: str
+@app.post("/token")
+async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends()):
+    user = users_db.get(form_data.username)
+    if user is None or user.password != form_data.password:
+        raise HTTPException(status_code=400, detail="Incorrect username or password")
+    access_token = create_access_token(data={"sub": user.username})
+    return {"access_token": access_token, "token_type": "bearer"}
 
-@app.post("/user", response_model=UserOut, status_code=status.HTTP_201_CREATED)
-def create_user(user: UserIn):
-    result = users_collection.insert_one({
-        "name": user.name
-    })
 
-    return {
-        "id": str(result.inserted_id),
-        "name": user.name
-    }
+@app.get("/protected")
+async def protected_route(username: str = Depends(get_current_user)):
+    return {"message": f"Hello, {username}! This is a protected resource."}
